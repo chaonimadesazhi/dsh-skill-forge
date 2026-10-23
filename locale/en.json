@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Skill Forge",
+    "description": "Distill a reusable SKILL.md from this conversation or from pasted context and write it to ~/.dsh/skills, so a similar question later hits a skill instead of re-deriving the answer. Also browse, preview, and delete forged skills in the Web GUI."
+  }
+}

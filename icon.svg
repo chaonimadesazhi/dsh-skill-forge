@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" role="img" aria-label="Skill Forge">
+  <rect x="1" y="1" width="30" height="30" rx="8" fill="#1c2b3a"/>
+  <rect x="1" y="1" width="30" height="30" rx="8" fill="none" stroke="#3f6b8f" stroke-width="1.2"/>
+  <path d="M9 21.5 12.5 25l10-10-3.5-3.5z" fill="none" stroke="#f2b544" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M9.2 21.3 6.5 24l1.6 1.6 2.7-2.7" fill="none" stroke="#f2b544" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M17.5 6.5h5.5M17.5 10h7M20.5 13.5h4.5" stroke="#7fc7ff" stroke-width="1.6" stroke-linecap="round"/>
+  <circle cx="23.5" cy="8.2" r="1.4" fill="#7fc7ff"/>
+</svg>

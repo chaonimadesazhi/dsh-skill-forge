@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "技能锻造炉 (Skill Forge)",
+    "description": "把一段对话或粘贴的上下文沉淀成可复用的 SKILL.md，写入 ~/.dsh/skills；下次相似问题直接命中技能，省下重复推理的 token。同时在 Web GUI 里浏览、预览和删除这些技能。"
+  }
+}

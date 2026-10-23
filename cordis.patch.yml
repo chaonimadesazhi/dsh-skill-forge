@@ -1,0 +1,11 @@
+# dsh-skill-forge bundle patch.
+# One row carries both faces: the host half (exports ".") registers the
+# skill_forge_* tools and the /api/dsh-skill-forge route family; the
+# `dsh.client` manifest field loads the browser half (exports "./client")
+# as the "skill-forge" panel in the Web GUI.
+- insert:
+    - id: skill-forge
+      name: dsh-skill-forge
+      config:
+        maxCaptureChars: 20000
+        toolCaptureChars: 16000

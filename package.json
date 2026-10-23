@@ -1,0 +1,69 @@
+{
+  "name": "dsh-skill-forge",
+  "version": "1.0.0",
+  "description": "Skill Forge for DeepSeek Harness: distill a conversation or pasted context into a reusable SKILL.md, so a similar question later hits a skill instead of re-deriving the answer. Includes 4 model tools and a Web GUI panel.",
+  "type": "module",
+  "icon": "icon.svg",
+  "license": "MIT",
+  "author": "chaonimadesazhi",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/chaonimadesazhi/dsh-skill-forge.git"
+  },
+  "homepage": "https://github.com/chaonimadesazhi/dsh-skill-forge#readme",
+  "bugs": {
+    "url": "https://github.com/chaonimadesazhi/dsh-skill-forge/issues"
+  },
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "dsh",
+    "skill",
+    "skills",
+    "agent",
+    "memory",
+    "prompt",
+    "plugin"
+  ],
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "README.md",
+    "README.en.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "dsh": {
+    "engines": {
+      "dsh": ">=0.2.0-rc.2"
+    },
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-renderer",
+        "@deepseek-ai/dsh-client-ui-layout"
+      ]
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh": ">=0.2.0-rc.2",
+    "react": "^18.2.0"
+  }
+}
