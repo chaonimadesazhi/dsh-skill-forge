@@ -1,0 +1,64 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Syntax check
+        run: |
+          node --check index.js
+          node --check client.js
+
+      - name: Validate manifests and locales
+        run: |
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            if (!pkg.dsh?.bundle?.patch) throw new Error('package.json: dsh.bundle.patch missing');
+            if (!pkg.dsh?.client?.platform) throw new Error('package.json: dsh.client.platform missing');
+            for (const f of [pkg.dsh.bundle.patch, 'index.js', 'client.js', 'icon.svg']) {
+              if (!fs.existsSync(f)) throw new Error('missing file: ' + f);
+            }
+            for (const lang of ['zh', 'en']) {
+              const dict = JSON.parse(fs.readFileSync('locale/' + lang + '.json', 'utf8'));
+              if (!dict?.meta?.title || !dict?.meta?.description) throw new Error('locale/' + lang + '.json meta incomplete');
+            }
+            const patch = fs.readFileSync(pkg.dsh.bundle.patch, 'utf8');
+            if (!patch.includes('name: dsh-skill-forge')) throw new Error('patch does not insert this package');
+            console.log('manifest + locales OK');
+          "
+
+      - name: Host half loads and registers
+        run: |
+          node --input-type=module -e "
+            import('./index.js').then((mod) => {
+              if (typeof mod.apply !== 'function') throw new Error('apply missing');
+              if (!Array.isArray(mod.inject)) throw new Error('inject missing');
+              const tools = [], routes = [];
+              const ctx = {
+                logger: { info(){}, warn(){}, error(){}, debug(){} },
+                on(){ return () => {}; },
+                effect(fn){ const d = fn(); return typeof d === 'function' ? d : () => {}; },
+                get(){ return undefined; },
+                tools: { register(def){ tools.push(def); return () => {}; } },
+                webServer: { register(r){ routes.push(r); return () => {}; } },
+              };
+              mod.apply(ctx, {});
+              const names = tools.map((t) => t.name).sort().join(',');
+              const expected = 'skill_forge_context,skill_forge_delete,skill_forge_list,skill_forge_save';
+              if (names !== expected) throw new Error('tools: ' + names);
+              if (routes.length !== 7) throw new Error('routes: ' + routes.length);
+              console.log('host OK:', tools.length, 'tools,', routes.length, 'routes');
+            }).catch((e) => { console.error(e); process.exit(1); });
+          "
