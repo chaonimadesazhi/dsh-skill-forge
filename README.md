@@ -47,7 +47,7 @@ AI 提炼需要宿主同时具备 `llm` 与 `agentDefaultModel` 服务；不可�
 
 ## 安装
 
-### 方式 A：从 npm（发布后可用）
+### 方式 A：从 npm
 
 ```sh
 dsh plugin --profile web add dsh-skill-forge
