@@ -47,7 +47,7 @@ Distillation needs both the `llm` and `agentDefaultModel` host services. When ei
 
 ## Install
 
-### A. From npm (after publishing)
+### A. From npm
 
 ```sh
 dsh plugin --profile web add dsh-skill-forge
