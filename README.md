@@ -4,10 +4,6 @@
 
 DeepSeek Harness（DSH）插件。提供 4 个模型工具 + 一个 Web GUI 面板（侧边栏「技能锻造炉」）。
 
-<p align="center">
-  <img src="docs/screenshots/01-library-light.jpg" alt="技能库" width="820">
-</p>
-
 ---
 
 ## 它解决什么问题
@@ -31,7 +27,6 @@ Skill Forge 做一件事：**把一个已经解决的流程，在对话结束时
 模型依次调用：
 
 | 工具 | 作用 |
-|---|---|
 | `skill_forge_context` | 取当前会话（或指定会话）最近 N 轮的有界摘要，默认 10 轮 / 16000 字符，超长保留最新尾部 |
 | `skill_forge_save` | 写 `~/.dsh/skills/<name>/SKILL.md`；同名默认拒绝，覆盖时留 `.bak` |
 | `skill_forge_list` | 列出本插件写过的技能（含路径、大小、时间） |
@@ -45,10 +40,6 @@ Skill Forge 做一件事：**把一个已经解决的流程，在对话结束时
 
 - **技能库** — 搜索 / 点行预览 / 删除（移入 `.trash`）。预览支持 Markdown 渲染与「原文」切换。
 - **锻造** — 选一个最近会话，或直接粘贴文本；可留空名称/描述让 AI 生成；「AI 提炼」产出草稿 → 人工确认 → 保存。
-
-<p align="center">
-  <img src="docs/screenshots/03-forge-light.jpg" alt="锻造页" width="820">
-</p>
 
 AI 提炼需要宿主同时具备 `llm` 与 `agentDefaultModel` 服务；不可用时接口返回 **503 `llm-unavailable`**，面板会提示改走路径 1，或手动填写草稿直接保存。
 
@@ -148,20 +139,6 @@ node --check client.js
 ```
 
 发布前在本地做过两套检查：结构一致性 61 项、功能行为 73 项（用临时 `DSH_HOME`，不触碰真实技能）。详见 [docs/维护者手册.md](docs/维护者手册.md)。
-
----
-
-## 截图
-
-| 预览（Markdown 渲染） | 草稿确认 |
-|---|---|
-| <img src="docs/screenshots/02-preview-markdown.jpg" width="400"> | <img src="docs/screenshots/04-draft.jpg" width="400"> |
-
-深色主题：
-
-<p align="center">
-  <img src="docs/screenshots/05-library-dark.jpg" alt="深色主题" width="820">
-</p>
 
 ---
 

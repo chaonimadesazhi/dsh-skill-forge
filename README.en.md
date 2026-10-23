@@ -4,10 +4,6 @@
 
 A DeepSeek Harness (DSH) plugin: four model-facing tools plus a Web GUI panel.
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/chaonimadesazhi/dsh-skill-forge/main/docs/screenshots/01-library-light.jpg" alt="Skill library" width="820">
-</p>
-
 ---
 
 ## The problem
@@ -31,7 +27,6 @@ Just ask in natural language:
 The model then calls:
 
 | Tool | What it does |
-|---|---|
 | `skill_forge_context` | Bounded digest of the current (or a named) session — 10 turns / 16k chars by default, keeping the newest tail |
 | `skill_forge_save` | Writes `~/.dsh/skills/<name>/SKILL.md`; refuses same-name by default, keeps a `.bak` on overwrite |
 | `skill_forge_list` | Lists skills this plugin wrote, with path, size and mtime |
@@ -45,10 +40,6 @@ A sidebar icon (below the task board) opens two tabs:
 
 - **Library** — search, click a row to preview, delete into `.trash`. The preview renders Markdown with a raw-source toggle.
 - **Forge** — pick a recent session or paste text; leave name/description blank to let the AI fill them; "Distill with AI" produces a draft → review → save.
-
-<p align="center">
-  <img src="https://raw.githubusercontent.com/chaonimadesazhi/dsh-skill-forge/main/docs/screenshots/03-forge-light.jpg" alt="Forge tab" width="820">
-</p>
 
 Distillation needs both the `llm` and `agentDefaultModel` host services. When either is missing the route answers **503 `llm-unavailable`**, and the panel points you at path 1 or a manually written draft.
 
@@ -144,20 +135,6 @@ node --check client.js
 ```
 
 Two local suites were run before release: 61 structural checks and 73 behavioural checks (against a throwaway `DSH_HOME`, never your real skills). See [docs/维护者手册.md](docs/维护者手册.md) (Chinese).
-
----
-
-## Screenshots
-
-| Markdown preview | Draft review |
-|---|---|
-| <img src="https://raw.githubusercontent.com/chaonimadesazhi/dsh-skill-forge/main/docs/screenshots/02-preview-markdown.jpg" width="400"> | <img src="https://raw.githubusercontent.com/chaonimadesazhi/dsh-skill-forge/main/docs/screenshots/04-draft.jpg" width="400"> |
-
-Dark theme:
-
-<p align="center">
-  <img src="https://raw.githubusercontent.com/chaonimadesazhi/dsh-skill-forge/main/docs/screenshots/05-library-dark.jpg" alt="Dark theme" width="820">
-</p>
 
 ---
 
