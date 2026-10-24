@@ -38,8 +38,15 @@
         'delete.confirm': '删除技能 {name}？将移入 .trash 可恢复', 'delete.done': '已移入回收站：{path}',
         'save.done': '已保存技能 {name}', 'save.exists': '同名技能已存在，覆盖？', 'save.cancelled': '已取消保存（未覆盖同名技能）。',
         'forge.source.label': '来源', 'forge.source.session': '对话', 'forge.source.text': '粘贴文本',
-        'forge.session.label': '最近会话', 'forge.session.empty': '没有可读的最近会话。', 'forge.session.loading': '正在读取最近会话…',
-        'forge.lastTurns': '最近轮数', 'forge.text.label': '待总结的文本',
+        'forge.session.label': '对话', 'forge.session.empty': '没有可读的对话。', 'forge.session.loading': '正在读取对话…',
+        'forge.lastTurns': '读取轮数', 'forge.allTurns': '全部',
+        'forge.lastTurns.hint': '留空 = 读取全部轮次；填数字 = 只读最近 N 轮',
+        'forge.workspace.none': '未指定工作区',
+        'forge.model.label': '锻造模型',
+        'forge.model.default': '跟随默认模型',
+        'forge.model.defaultNamed': '跟随默认（{model}）',
+        'forge.session.subagent': '子代理对话', 'forge.session.children': '含 {n} 个子代理对话',
+        'forge.text.label': '待总结的文本',
         'forge.text.placeholder': '把需要总结的对话/资料粘贴到这里',
         'forge.name': '名称（可选）', 'forge.name.placeholder': '留空由 AI 生成',
         'forge.description': '描述（可选）', 'forge.description.placeholder': '留空由 AI 生成',
@@ -71,8 +78,15 @@
         'save.done': 'Saved skill {name}', 'save.exists': 'A skill with this name exists. Overwrite?',
         'save.cancelled': 'Save cancelled (existing skill left intact).',
         'forge.source.label': 'Source', 'forge.source.session': 'Conversation', 'forge.source.text': 'Pasted text',
-        'forge.session.label': 'Recent session', 'forge.session.empty': 'No readable recent session.',
-        'forge.session.loading': 'Reading recent sessions…', 'forge.lastTurns': 'Last turns', 'forge.text.label': 'Text to distill',
+        'forge.session.label': 'Conversation', 'forge.session.empty': 'No readable conversation.',
+        'forge.session.loading': 'Reading conversations…', 'forge.lastTurns': 'Turns to read',
+        'forge.allTurns': 'all', 'forge.lastTurns.hint': 'Blank = read every turn; a number = only the most recent N turns',
+        'forge.workspace.none': 'No workspace',
+        'forge.model.label': 'Forge model',
+        'forge.model.default': 'Follow the default model',
+        'forge.model.defaultNamed': 'Follow default ({model})',
+        'forge.session.subagent': 'subagent conversation', 'forge.session.children': '{n} subagent conversation(s)',
+        'forge.text.label': 'Text to distill',
         'forge.text.placeholder': 'Paste the conversation / material to summarize here',
         'forge.name': 'Name (optional)', 'forge.name.placeholder': 'Leave blank to let the AI generate',
         'forge.description': 'Description (optional)', 'forge.description.placeholder': 'Leave blank to let the AI generate',
@@ -311,6 +325,7 @@
         save: 'api/dsh-skill-forge/save',
         remove: 'api/dsh-skill-forge/delete',
         sessions: 'api/dsh-skill-forge/sessions',
+        models: 'api/dsh-skill-forge/models',
         distill: 'api/dsh-skill-forge/distill',
       }
       async function request(path, options) {
@@ -349,7 +364,8 @@
         read: (name) => request(withQuery(API.read, { name })),
         save: (body) => request(API.save, { method: 'POST', body }),
         remove: (name) => request(API.remove, { method: 'POST', body: { name } }),
-        sessions: (limit) => request(withQuery(API.sessions, { limit: limit === undefined ? 20 : limit })),
+        sessions: (limit) => request(withQuery(API.sessions, { limit: limit === undefined ? 300 : limit })),
+        models: () => request(API.models),
         distill: (body) => request(API.distill, { method: 'POST', body }),
       }
       function describeError(err) {
@@ -992,7 +1008,9 @@
         const [sessionsLoading, setSessionsLoading] = React.useState(false)
         const [sessionsError, setSessionsError] = React.useState('')
         const [sessionId, setSessionId] = React.useState('')
-        const [lastTurns, setLastTurns] = React.useState('10')
+        // Empty string means "all turns". The host treats 0 as unbounded, so an
+        // empty box simply omits lastTurns from the request.
+        const [lastTurns, setLastTurns] = React.useState('')
         const [text, setText] = React.useState('')
         const [name, setName] = React.useState('')
         const [description, setDescription] = React.useState('')
@@ -1003,12 +1021,36 @@
         const [saving, setSaving] = React.useState(false)
         const [saveError, setSaveError] = React.useState('')
         const [llmUnavailable, setLlmUnavailable] = React.useState(false)
+        // Model used for the distill call. '' = follow the agent default.
+        const [models, setModels] = React.useState([])
+        const [modelDefault, setModelDefault] = React.useState(null)
+        const [modelChoice, setModelChoice] = React.useState('')
+
+        const loadModels = React.useCallback(async function loadModels() {
+          try {
+            const data = await client.models()
+            const providers = data && Array.isArray(data.providers) ? data.providers : []
+            setModels(providers.filter(function usable(p) { return p && Array.isArray(p.models) }))
+            setModelDefault(data && data.default && typeof data.default === 'object' ? data.default : null)
+          } catch {
+            // The model directory is optional; the panel still works on the default.
+            setModels([])
+            setModelDefault(null)
+          }
+        }, [client])
+
+        React.useEffect(function loadModelsOnMount() {
+          void loadModels()
+          return undefined
+        }, [loadModels])
 
         const loadSessions = React.useCallback(async function loadSessions() {
           setSessionsLoading(true)
           setSessionsError('')
           try {
-            const data = await client.sessions(20)
+            // The picker groups by workspace and shows subagent lineage, so it needs
+            // the whole recent corpus rather than the old 20-item page.
+            const data = await client.sessions(300)
             const list = data && Array.isArray(data.sessions) ? data.sessions : []
             setSessions(list)
             if (list.length > 0) setSessionId((previous) => previous || asString(list[0].id))
@@ -1051,10 +1093,17 @@
               return
             }
             body.sessionId = sessionId
-            body.lastTurns = clampInt(lastTurns, 10, 1, 50)
+            // Only send a limit when the user typed one; empty = read everything.
+            if (asString(lastTurns).trim() !== '') body.lastTurns = clampInt(lastTurns, 0, 0, 500)
           }
           if (name.trim()) body.name = name.trim()
           if (description.trim()) body.description = description.trim()
+          // "provider|model" from the picker; omitted entirely = follow the default.
+          if (modelChoice.indexOf('|') > 0) {
+            const parts = modelChoice.split('|')
+            if (parts[0]) body.provider = parts[0]
+            if (parts[1]) body.model = parts[1]
+          }
           setDistilling(true)
           try {
             const data = await client.distill(body)
@@ -1070,7 +1119,7 @@
           } finally {
             setDistilling(false)
           }
-        }, [client, source, text, sessionId, lastTurns, name, description])
+        }, [client, source, text, sessionId, lastTurns, name, description, modelChoice])
 
         const onManualDraft = React.useCallback(function onManualDraft() {
           setSaveError('')
@@ -1149,16 +1198,91 @@
         const showHint = llmUnavailable || (!!health && health.hasLlm === false)
         // Guards undefined as well as null: never assume the draft exists.
         const nameOk = !draft || isKebabName(asString(draft.name).trim())
+
+        /**
+         * Group the session list by workspace, then mark subagent lineage.
+         *
+         * A workspace is the session's `cwd`. Sessions spawned by another agent
+         * carry `isSubagent` and a `parentSession`; they are listed under the same
+         * workspace but indented and suffixed so the user can tell a top-level
+         * conversation from one an agent created. `childCount` lets a top-level row
+         * advertise that it owns subagent conversations.
+         */
+        const sessionGroups = React.useMemo(function buildSessionGroups() {
+          const groups = new Map()
+          for (const session of sessions) {
+            const cwd = asString(session && session.cwd).trim()
+            const key = cwd === '' ? '' : cwd
+            if (!groups.has(key)) groups.set(key, [])
+            groups.get(key).push(session)
+          }
+          const order = [...groups.keys()].sort(function sortWorkspaces(a, b) {
+            if (a === '') return 1
+            if (b === '') return -1
+            return a.localeCompare(b)
+          })
+          return order.map(function wrap(key) {
+            const rows = groups.get(key)
+            rows.sort(function sortByNewest(a, b) {
+              return (Number(b && b.updatedAt) || 0) - (Number(a && a.updatedAt) || 0)
+            })
+            return { cwd: key, label: key === '' ? tt('forge.workspace.none') : key, sessions: rows }
+          })
+        }, [sessions])
+
+        /** One `<option>` label: indented subagent rows carry their lineage markers. */
+        const sessionOptionLabel = React.useCallback(function sessionOptionLabel(session) {
+          const title = asString(session && session.title) || asString(session && session.id) || '(untitled)'
+          const depth = Math.max(0, Number(session && session.depth) || 0)
+          const indent = depth > 0 ? '↳ ' : ''
+          const marks = []
+          if (session && session.isSubagent === true) marks.push(tt('forge.session.subagent'))
+          if (Number(session && session.childCount) > 0) marks.push(tt('forge.session.children', { n: Number(session.childCount) }))
+          const suffix = marks.length > 0 ? '　· ' + marks.join(' · ') : ''
+          return indent + title + suffix
+        }, [])
+
         const sessionPicker = sessions.length > 0
           ? h('select', {
             className: 'sfx_select', value: sessionId, disabled: sessionsLoading,
             onChange: (event) => safe(setSessionId, eventValue(event)),
-          }, sessions.map(function renderOption(session, index) {
-            const id = asString(session && session.id)
-            const title = asString(session && session.title)
-            return h('option', { key: id + ':' + index, value: id }, title || id || '(untitled)')
+          }, sessionGroups.map(function renderGroup(group) {
+            return h('optgroup', { key: 'ws:' + group.cwd, label: group.label },
+              group.sessions.map(function renderOption(session, index) {
+                const id = asString(session && session.id)
+                return h('option', { key: id + ':' + index, value: id }, sessionOptionLabel(session))
+              }))
           }))
           : h('div', { className: 'sfx_loading' }, sessionsLoading ? tt('forge.session.loading') : sessionsError || tt('forge.session.empty'))
+
+        /**
+         * Model picker for the distill call.
+         *
+         * The first option keeps the agent default; every other entry is a concrete
+         * provider|model pair. When the host reports no enumerable models at all the
+         * picker is omitted rather than shown empty — distillation still works.
+         */
+        const modelPicker = models.length > 0
+          ? h('select', {
+            className: 'sfx_select', value: modelChoice,
+            onChange: (event) => safe(setModelChoice, eventValue(event)),
+          },
+          h('option', { value: '' },
+            modelDefault && modelDefault.model
+              ? tt('forge.model.defaultNamed', { model: asString(modelDefault.model) })
+              : tt('forge.model.default')),
+          models.map(function renderProvider(provider) {
+            const pid = asString(provider && provider.id)
+            if (pid === '') return null
+            return h('optgroup', { key: 'pv:' + pid, label: asString(provider.name) || pid },
+              provider.models.map(function renderModel(model) {
+                const mid = asString(model && model.id)
+                if (mid === '') return null
+                return h('option', { key: pid + '|' + mid, value: pid + '|' + mid },
+                  asString(model.name) || mid)
+              }))
+          }))
+          : null
 
         return h('div', { className: 'sfx_body' },
           h('div', { className: 'sfx_form' },
@@ -1167,12 +1291,15 @@
               ? h('div', { className: 'sfx_row_inline' },
                 h('div', { className: 'sfx_field sfx_grow' }, field(tt('forge.session.label'), sessionPicker)),
                 field(tt('forge.lastTurns'), h('input', {
-                  type: 'number', className: 'sfx_input sfx_input_tiny', min: 1, max: 50, step: 1,
+                  type: 'number', className: 'sfx_input sfx_input_tiny', min: 0, max: 500, step: 1,
                   value: lastTurns,
-                  onChange: (event) => safe(setLastTurns, eventValue(event) || '10'),
+                  placeholder: tt('forge.allTurns'),
+                  title: tt('forge.lastTurns.hint'),
+                  onChange: (event) => safe(setLastTurns, eventValue(event)),
                 })))
               : field(tt('forge.text.label'), textArea(text, setText, { rows: 7, placeholder: tt('forge.text.placeholder') })),
             errorBar(sessionsError),
+            modelPicker ? field(tt('forge.model.label'), modelPicker) : null,
             h('div', { className: 'sfx_row_inline' },
               h('div', { className: 'sfx_field sfx_grow' }, field(tt('forge.name'), textInput(name, setName, { placeholder: tt('forge.name.placeholder') }))),
               h('div', { className: 'sfx_field sfx_grow' }, field(tt('forge.description'), textInput(description, setDescription, { placeholder: tt('forge.description.placeholder') })))),

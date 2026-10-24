@@ -1,6 +1,6 @@
 {
   "name": "dsh-skill-forge",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Skill Forge for DeepSeek Harness: distill a conversation or pasted context into a reusable SKILL.md, so a similar question later hits a skill instead of re-deriving the answer. Includes 4 model tools and a Web GUI panel.",
   "type": "module",
   "icon": "icon.svg",
@@ -65,5 +65,13 @@
   "peerDependencies": {
     "@deepseek-ai/dsh": ">=0.2.0-rc.2",
     "react": "^18.2.0"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    }
   }
 }

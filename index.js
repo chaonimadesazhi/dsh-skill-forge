@@ -40,7 +40,7 @@ const SKILL_NAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 const ROUTE_PREFIX = '/api/dsh-skill-forge'
 const MAX_BODY_BYTES = 1024 * 1024
 const DISTILL_TIMEOUT_MS = 45_000
-const DEFAULT_LAST_TURNS = 10
+const DEFAULT_LAST_TURNS = 0 // 0 = read every exchange; maxChars still bounds the digest.
 const DEFAULT_CAPTURE_CHARS = 20_000
 const DEFAULT_TOOL_CHARS = 16_000
 const DIGEST_SOURCE_HINT = 'session'
@@ -313,7 +313,12 @@ function digestFromEvents(events, options) {
       if (text.length > 0) current.resultTexts.push(text)
     }
   }
-  const selected = exchanges.slice(Math.max(0, exchanges.length - lastTurns))
+  // `lastTurns` 0 / undefined means "every exchange in the log". The digest is
+  // still bounded by maxChars, so an unbounded turn count cannot produce an
+  // unbounded result — it only stops the count from silently dropping early turns.
+  const selected = lastTurns > 0
+    ? exchanges.slice(Math.max(0, exchanges.length - lastTurns))
+    : exchanges
   const chunks = []
   let index = exchanges.length - selected.length + 1
   for (const exchange of selected) {
@@ -348,7 +353,11 @@ function digestFromMessages(messages, options) {
  * before it, so a failure degrades instead of failing the whole call.
  */
 async function captureSession(ctx, sessionId, options = {}) {
-  const lastTurns = normalizeInt(options.lastTurns, DEFAULT_LAST_TURNS, 1, 50)
+  // Default is now EVERY exchange (0 = no limit). Callers that want a window can
+  // still pass lastTurns; the 500 ceiling exists only to reject absurd input.
+  const lastTurns = options.lastTurns === undefined
+    ? DEFAULT_LAST_TURNS
+    : normalizeInt(options.lastTurns, DEFAULT_LAST_TURNS, 0, 500)
   const maxChars = normalizeInt(options.maxChars, DEFAULT_TOOL_CHARS, 500, DEFAULT_CAPTURE_CHARS * 4)
   const includeToolResults = options.includeToolResults === true
   const query = ctx.get('sessionQuery', false)
@@ -420,6 +429,10 @@ function finalizeDigest(digest, maxChars, source, sessionId, lastTurns) {
 
 /** Normalise an optional integer argument. */
 function normalizeInt(value, fallback, min, max) {
+  // `Number(null) === 0` and `Number('') === 0`, so an absent query parameter or a
+  // cleared input box would otherwise clamp to `min` instead of using the fallback.
+  // That made a missing ?limit= return exactly 1 session.
+  if (value === undefined || value === null || value === '') return fallback
   const n = Number(value)
   if (!Number.isFinite(n)) return fallback
   return Math.min(max, Math.max(min, Math.round(n)))
@@ -535,22 +548,98 @@ function extractJsonObject(text) {
   }
 }
 
-/** Whether the host can make one-shot model calls right now. */
-function llmFace(ctx) {
+/**
+ * Whether the host can make one-shot model calls right now.
+ *
+ * `override` lets the panel choose which model forges the skill. A route the user
+ * picked explicitly wins over the agent default, but the provider must still be
+ * registered by some adapter — otherwise the call could only fail at dispatch.
+ * `reasoningEffort` belongs to the default model, so it is dropped on override.
+ */
+function llmFace(ctx, override) {
   const llm = ctx.get('llm', false)
   const selection = ctx.get('agentDefaultModel', false)
   if (llm === undefined || typeof llm.stream !== 'function') return undefined
-  if (selection === undefined || typeof selection.currentSelection !== 'function') return undefined
-  let current
-  try {
-    current = selection.currentSelection()
-  } catch {
-    return undefined
+
+  let providerOverride
+  let modelOverride
+  if (override !== undefined && override !== null) {
+    if (typeof override.provider === 'string' && override.provider.trim() !== '') providerOverride = override.provider.trim()
+    if (typeof override.model === 'string' && override.model.trim() !== '') modelOverride = override.model.trim()
   }
-  const provider = current?.provider
-  const model = current?.model
+
+  let current
+  if (selection !== undefined && typeof selection.currentSelection === 'function') {
+    try {
+      current = selection.currentSelection()
+    } catch {
+      current = undefined
+    }
+  }
+
+  const provider = providerOverride ?? current?.provider
+  const model = modelOverride ?? current?.model
   if (typeof provider !== 'string' || typeof model !== 'string') return undefined
-  return { llm, provider, model, reasoningEffort: current.reasoningEffort }
+  if (provider === '') return undefined
+  // An overridden route carries no inherited effort: it belonged to the default model.
+  const reasoningEffort = providerOverride === undefined && modelOverride === undefined
+    ? current?.reasoningEffort
+    : undefined
+  return { llm, provider, model, reasoningEffort, overridden: providerOverride !== undefined || modelOverride !== undefined }
+}
+
+/**
+ * Enumerate every model the panel may choose: one entry per registered provider,
+ * with the models that provider advertises.
+ *
+ * `listModels` is optional adapter surface, so a provider whose adapter cannot
+ * enumerate degrades to "provider known, no model list" instead of failing the
+ * whole directory — the panel then offers manual entry for that provider.
+ */
+async function listForgeModels(ctx) {
+  const llm = ctx.get('llm', false)
+  if (llm === undefined) return { default: undefined, providers: [] }
+  const selection = ctx.get('agentDefaultModel', false)
+  let fallback
+  if (selection !== undefined && typeof selection.currentSelection === 'function') {
+    try {
+      const current = selection.currentSelection()
+      if (current?.provider && current?.model) fallback = { provider: current.provider, model: current.model }
+    } catch {
+      /* the directory is still useful without a default */
+    }
+  }
+  let providers = []
+  if (typeof llm.listProviders === 'function') {
+    try {
+      providers = llm.listProviders()
+    } catch {
+      providers = []
+    }
+  }
+  const entries = []
+  for (const info of providers) {
+    const id = typeof info?.id === 'string' ? info.id : undefined
+    if (id === undefined) continue
+    let models = []
+    if (typeof llm.listModels === 'function') {
+      try {
+        const listed = await llm.listModels(id)
+        models = (Array.isArray(listed) ? listed : [])
+          .filter((m) => typeof m?.id === 'string')
+          .map((m) => ({ id: m.id, name: typeof m.name === 'string' ? m.name : m.id }))
+      } catch {
+        models = []
+      }
+    }
+    entries.push({
+      id,
+      name: typeof info?.name === 'string' ? info.name : id,
+      models,
+      enumerable: models.length > 0
+    })
+  }
+  return { default: fallback, providers: entries }
 }
 
 /**
@@ -649,9 +738,9 @@ function createTools(ctx, config) {
           },
           lastTurns: {
             type: 'integer',
-            minimum: 1,
-            maximum: 50,
-            description: 'How many most-recent user/assistant exchanges to keep. Defaults to 10.'
+            minimum: 0,
+            maximum: 500,
+            description: 'How many of the most recent user/assistant exchanges to keep. Omit or pass 0 to read the whole conversation; the returned digest is still bounded by maxChars.'
           },
           maxChars: {
             type: 'integer',
@@ -967,12 +1056,43 @@ function createRoutes(ctx, config) {
     }),
 
     route('sessions', 'GET', async (req, res) => {
-      const limit = normalizeInt(queryOf(req).searchParams.get('limit'), 20, 1, 100)
+      // Grouping by workspace and showing subagent lineage needs the whole recent
+      // corpus, not a 20-item page, so the default window is much wider than before.
+      const limit = normalizeInt(queryOf(req).searchParams.get('limit'), 300, 1, 1000)
+
+      /** Project one header into the shape the panel groups by. */
+      const project = (header, titles) => {
+        const id = String(header?.id ?? '')
+        // `origin: 'subagent'` marks a session spawned by another agent;
+        // `parentSession` is its owner. Both are part of the immutable header.
+        const isSubagent = header?.origin === 'subagent'
+        return {
+          id,
+          title: titles.get(id) ?? '',
+          updatedAt: header?.createdAt ?? undefined,
+          ...(header?.cwd === undefined ? {} : { cwd: header.cwd }),
+          ...(header?.parentSession === undefined ? {} : { parentSession: String(header.parentSession) }),
+          isSubagent,
+          depth: typeof header?.delegationDepth === 'number' ? header.delegationDepth : (isSubagent ? 1 : 0)
+        }
+      }
+
+      /** Count direct children per parent so a row can say "N 个子代理对话". */
+      const withChildCounts = (rows) => {
+        const counts = new Map()
+        for (const row of rows) {
+          if (row.parentSession !== undefined) {
+            counts.set(row.parentSession, (counts.get(row.parentSession) ?? 0) + 1)
+          }
+        }
+        return rows.map((row) => ({ ...row, childCount: counts.get(row.id) ?? 0 }))
+      }
+
       const query = ctx.get('sessionQuery', false)
       if (query !== undefined && typeof query.listSessions === 'function') {
         const records = (await query.listSessions()).slice(0, limit)
         const ids = records.map((record) => record.header.id)
-        let titles = new Map()
+        const titles = new Map()
         if (typeof query.readTitleSnapshots === 'function' && ids.length > 0) {
           try {
             const observed = await query.readTitleSnapshots(ids)
@@ -986,24 +1106,25 @@ function createRoutes(ctx, config) {
           }
         }
         writeJson(res, 200, {
-          sessions: records.map((record) => ({
-            id: String(record.header.id),
-            title: titles.get(String(record.header.id)) ?? '',
-            updatedAt: record.header.createdAt ?? undefined,
-            ...(record.header.cwd === undefined ? {} : { cwd: record.header.cwd })
-          }))
+          total: records.length,
+          sessions: withChildCounts(records.map((record) => project(record.header, titles)))
         })
         return
       }
       const sessions = ctx.get('sessions', false)
       const live = sessions !== undefined && typeof sessions.list === 'function' ? sessions.list() : []
+      const rows = live.slice(-limit).reverse().map((session) => project(session.header, new Map()))
+      writeJson(res, 200, { total: rows.length, sessions: withChildCounts(rows) })
+    }),
+
+    route('models', 'GET', async (_req, res) => {
+      const directory = await listForgeModels(ctx)
       writeJson(res, 200, {
-        sessions: live.slice(-limit).reverse().map((session) => ({
-          id: String(session.header?.id ?? session.id ?? ''),
-          title: '',
-          ...(session.header?.createdAt === undefined ? {} : { updatedAt: session.header.createdAt }),
-          ...(session.header?.cwd === undefined ? {} : { cwd: session.header.cwd })
-        }))
+        // `default` is what the panel shows as "follow the agent default"; it can be
+        // absent when no default model is configured, in which case only the listed
+        // providers are selectable.
+        default: directory.default ?? null,
+        providers: directory.providers
       })
     }),
 
@@ -1040,7 +1161,11 @@ function createRoutes(ctx, config) {
         digest = captured
       }
       const digestMeta = { chars: digest.chars, truncated: digest.truncated, source: digest.source }
-      const face = llmFace(ctx)
+      // The panel may name the model that forges the skill; omitted = agent default.
+      const face = llmFace(ctx, {
+        provider: body.provider,
+        model: body.model
+      })
       if (face === undefined) {
         writeJson(res, 503, {
           error: 'llm-unavailable',

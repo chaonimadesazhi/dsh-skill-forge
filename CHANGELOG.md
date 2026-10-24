@@ -2,6 +2,38 @@
 
 本文件记录 Skill Forge 的版本变更。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.1.0] - 2026-10-24
+
+### 新增
+
+- **对话按工作区分组**：锻造页的会话下拉用 `optgroup` 按 `cwd` 分组，未归属工作区的会话单独成组。
+- **子代理对话可视化**：用会话头部的 `origin: 'subagent'` / `parentSession` 标记子代理会话，
+  选项以 `↳` 缩进并标注「子代理对话」；父会话标注「含 N 个子代理对话」。
+- **锻造模型可选**：新增 `GET /api/dsh-skill-forge/models`，枚举 `llm.listProviders()` 与
+  `llm.listModels(provider)`；面板新增「锻造模型」下拉，默认「跟随默认模型」，可按 provider 分组选具体模型。
+  `distill` 接受 `provider` / `model` 覆盖。无法枚举模型的 provider 仍会被列出但标记为空列表，
+  不会让整个目录失败。
+- 「最近会话」改称「对话」，「最近轮数」改称「读取轮数」。
+
+### 变更
+
+- **轮次默认读取全部**：`skill_forge_context` 与 `distill` 的 `lastTurns` 省略或传 `0` 表示读取全部轮次；
+  上下文仍由 `maxChars` 约束，因此不会无限膨胀。`lastTurns` 上限从 50 放宽到 500。
+- 会话列表默认窗口从 20 提高到 300（分组需要完整语料）。
+
+### 修复
+
+- `normalizeInt(null)` 因 `Number(null) === 0` 会把缺省查询参数钳到最小值，
+  导致不带 `?limit=` 的会话列表只返回 1 条。
+
+## [1.0.1] - 2026-10-24
+
+### 修复
+
+- 把 `@deepseek-ai/dsh` 和 `react` 标记为**可选** peer 依赖（`peerDependenciesMeta`）。
+  之前 `npm install dsh-skill-forge` 会自动拉取整个 DSH 运行时：实测 179 个包 / 79 MB。
+  插件在宿主内运行时由 DSH 提供这两个依赖，无需用户安装。
+
 ## [1.0.0] - 2026-10-23
 
 首个公开版本。
